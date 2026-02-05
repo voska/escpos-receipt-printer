@@ -1,10 +1,12 @@
-# Todo Ticket Printer Server
+# Receipt Print Server with Web UI
 
-Node.js application for printing TODO tickets on thermal receipt printers.
+Node.js application for printing TODO tickets and shopping lists on thermal receipt printers.
 
 ## Features
 
 - 🎫 Print todo tickets with title, assignee, and description
+- 🛒 Print shopping lists with checkboxes and quantities
+- 🌐 Beautiful web UI for easy printing
 - 🖨️ Support for USB and network thermal printers
 - 📋 RESTful API endpoints
 - 🐳 Docker support (recommended for network printers)
@@ -43,9 +45,13 @@ Node.js application for printing TODO tickets on thermal receipt printers.
    docker-compose up -d
    ```
 
-4. **Test the API:**
+4. **Open the Web UI:**
+
+   Navigate to `http://localhost:3000` in your browser to use the interface.
+
+5. **Or test the API directly:**
    ```bash
-   curl -X POST http://localhost:3000/print-todo \
+   curl -X POST http://localhost:3000/api/print-todo \
      -H "Content-Type: application/json" \
      -d '{
        "title": "Test the printer setup",
@@ -74,9 +80,30 @@ Node.js application for printing TODO tickets on thermal receipt printers.
    npm run todo-server
    ```
 
+4. **Open the Web UI:**
+
+   Navigate to `http://localhost:3000` in your browser.
+
+## Web UI
+
+The application includes a modern web interface for easy printing:
+
+- **Access:** `http://localhost:3000`
+- **Features:**
+  - Real-time printer status indicator
+  - Todo ticket form with title, assignee, and description fields
+  - Shopping list form with dynamic item management
+  - Add/remove items with optional quantities
+  - Toast notifications for success/error messages
+  - Responsive design for mobile and desktop
+
 ## API Endpoints
 
-### POST /print-todo
+### GET /
+
+Web UI for printing tickets and shopping lists.
+
+### POST /api/print-todo
 
 Print a TODO ticket.
 
@@ -105,6 +132,44 @@ Print a TODO ticket.
 }
 ```
 
+### POST /api/print-shopping-list
+
+Print a shopping list with checkboxes.
+
+**Request Body:**
+
+```json
+{
+  "title": "Grocery Shopping", // Optional: List title (default: "Shopping List")
+  "items": [ // Required: Array of items
+    "Milk",
+    "Bread",
+    { "name": "Eggs", "quantity": "12" },
+    { "name": "Apples", "quantity": "6" },
+    "Butter"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Shopping list printed successfully",
+  "list": {
+    "title": "Grocery Shopping",
+    "items": [...],
+    "itemCount": 5,
+    "timestamp": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+### GET /api
+
+API documentation and usage examples.
+
 ### GET /health
 
 Check server and printer status.
@@ -112,10 +177,6 @@ Check server and printer status.
 ### GET /printer-status
 
 Get detailed printer connection information.
-
-### GET /
-
-API documentation and usage examples
 
 ## Configuration
 
@@ -133,21 +194,47 @@ Configure your printer in the `.env` file. Choose either USB or Network mode:
 
 ## Examples
 
+### Using the Web UI (Easiest)
+
+1. Navigate to `http://localhost:3000`
+2. Fill out the form for either a todo or shopping list
+3. Click the print button
+4. Your receipt will print automatically!
+
 ### Using curl
+
+**Print a todo ticket:**
 
 ```bash
 # Simple ticket with just a title
-curl -X POST http://localhost:3000/print-todo \
+curl -X POST http://localhost:3000/api/print-todo \
   -H "Content-Type: application/json" \
   -d '{"title":"Review pull request #123"}'
 
 # Full ticket with assignee and description
-curl -X POST http://localhost:3000/print-todo \
+curl -X POST http://localhost:3000/api/print-todo \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Fix login bug",
     "assignee": "John Doe",
     "description": "Users are unable to login with special characters in their passwords"
+  }'
+```
+
+**Print a shopping list:**
+
+```bash
+# Shopping list with items
+curl -X POST http://localhost:3000/api/print-shopping-list \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Grocery Shopping",
+    "items": [
+      "Milk",
+      "Bread",
+      {"name": "Eggs", "quantity": "12"},
+      {"name": "Apples", "quantity": "6"}
+    ]
   }'
 ```
 
@@ -166,8 +253,10 @@ node test-client.js "Fix login bug" "John Doe" "Users cannot login with special 
 
 ### Using JavaScript fetch
 
+**Print a todo ticket:**
+
 ```javascript
-const response = await fetch("http://localhost:3000/print-todo", {
+const response = await fetch("http://localhost:3000/api/print-todo", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -176,6 +265,29 @@ const response = await fetch("http://localhost:3000/print-todo", {
     title: "Update documentation",
     assignee: "Alice Smith",
     description: "Add API documentation for the new endpoints",
+  }),
+});
+
+const result = await response.json();
+console.log(result);
+```
+
+**Print a shopping list:**
+
+```javascript
+const response = await fetch("http://localhost:3000/api/print-shopping-list", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    title: "Grocery Shopping",
+    items: [
+      "Milk",
+      "Bread",
+      { name: "Eggs", quantity: "12" },
+      { name: "Apples", quantity: "6" }
+    ],
   }),
 });
 
