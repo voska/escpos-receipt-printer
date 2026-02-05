@@ -179,6 +179,108 @@ class TodoPrinter {
     }
   }
 
+  async printShoppingList(title = "Shopping List", items = []) {
+    if (!this.printer) {
+      throw new Error("Printer not initialized");
+    }
+
+    try {
+      // Clear buffer
+      this.printer.clear();
+
+      // Top header with emphasis
+      this.printer.alignCenter();
+      this.printer.setTextSize(2, 2);
+      this.printer.bold(true);
+      this.printer.invert(true);
+      this.printer.println(" SHOPPING ");
+      this.printer.invert(false);
+      this.printer.bold(false);
+      this.printer.setTextNormal();
+
+      // List title section
+      this.printer.alignLeft();
+      this.printer.drawLine();
+
+      // Title with large text
+      this.printer.setTextSize(1, 2);
+      this.printer.bold(true);
+      const wrappedTitle = this.wrapText(title, 24);
+      wrappedTitle.split("\n").forEach((line) => {
+        this.printer.println(line);
+      });
+      this.printer.bold(false);
+      this.printer.setTextNormal();
+      this.printer.newLine();
+
+      // Items section with checkboxes
+      if (items && items.length > 0) {
+        this.printer.setTextSize(1, 1);
+        items.forEach((item, index) => {
+          const itemText = typeof item === 'string' ? item : item.name || item.item || String(item);
+          const quantity = item.quantity ? ` (${item.quantity})` : '';
+          
+          // Checkbox and item
+          this.printer.bold(false);
+          this.printer.print("[ ] ");
+          
+          // Wrap long item names
+          const wrappedItem = this.wrapText(`${itemText}${quantity}`, 28); // 32 chars minus "[ ] " prefix
+          const lines = wrappedItem.split("\n");
+          
+          // First line
+          this.printer.println(lines[0]);
+          
+          // Additional lines with indentation
+          for (let i = 1; i < lines.length; i++) {
+            this.printer.println(`    ${lines[i]}`);
+          }
+        });
+        this.printer.newLine();
+      }
+
+      // Item count
+      this.printer.alignCenter();
+      this.printer.setTextSize(1, 1);
+      this.printer.bold(true);
+      this.printer.println(`Total Items: ${items.length}`);
+      this.printer.bold(false);
+      this.printer.newLine();
+
+      // Timestamp
+      const now = new Date();
+      const roundedHour =
+        now.getMinutes() >= 30 ? now.getHours() + 1 : now.getHours();
+      const hour12 =
+        roundedHour === 0
+          ? 12
+          : roundedHour > 12
+          ? roundedHour - 12
+          : roundedHour;
+      const ampm = roundedHour >= 12 && roundedHour < 24 ? "p" : "a";
+
+      const timestamp = `${hour12}${ampm} ${now.toLocaleDateString("en-US", {
+        weekday: "short",
+      })} - ${now.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })}`;
+      this.printer.println(timestamp);
+      this.printer.setTextNormal();
+      this.printer.alignLeft();
+
+      // Cut paper
+      this.printer.cut();
+
+      // Execute print job
+      await this.printer.execute();
+
+      console.log("✅ Shopping list printed successfully");
+    } catch (error) {
+      throw new Error(`Print error: ${error.message}`);
+    }
+  }
+
   // Simple word-wrap function
   wrapText(text, width) {
     const words = text.split(" ");
@@ -215,6 +317,7 @@ const port = 3000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
 
 // Initialize printer
 const printer = new TodoPrinter();
@@ -225,7 +328,7 @@ app.listen(port, async () => {
   console.log(
     `📋 Todo Ticket Printer Server running on http://localhost:${port}`
   );
-  console.log(`📄 Visit http://localhost:${port} for API documentation`);
+  console.log(`🌐 Open http://localhost:${port} in your browser to use the UI`);
 
   // Connect to printer after server starts
   console.log("🔌 Connecting to printer...");
@@ -251,7 +354,7 @@ app.get("/health", (req, res) => {
 });
 
 // Print todo ticket endpoint
-app.post("/print-todo", async (req, res) => {
+app.post("/api/print-todo", async (req, res) => {
   try {
     const { title, assignee, description } = req.body;
 
@@ -294,6 +397,55 @@ app.post("/print-todo", async (req, res) => {
   }
 });
 
+// Print shopping list endpoint
+app.post("/api/print-shopping-list", async (req, res) => {
+  try {
+    const { title, items } = req.body;
+
+    // Validate items field
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({
+        error: "Items is required and must be an array",
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(400).json({
+        error: "Items array cannot be empty",
+      });
+    }
+
+    if (!printerConnected) {
+      return res.status(503).json({
+        error: "Printer is not connected",
+      });
+    }
+
+    // Print the shopping list
+    await printer.printShoppingList(
+      title ? String(title).trim() : "Shopping List",
+      items
+    );
+
+    res.json({
+      success: true,
+      message: "Shopping list printed successfully",
+      list: {
+        title: title ? String(title).trim() : "Shopping List",
+        items: items,
+        itemCount: items.length,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Print error:", error);
+    res.status(500).json({
+      error: "Failed to print shopping list",
+      details: error.message,
+    });
+  }
+});
+
 // Get printer status
 app.get("/printer-status", (req, res) => {
   const status = {
@@ -318,31 +470,51 @@ app.get("/printer-status", (req, res) => {
   res.json(status);
 });
 
-// Basic usage info endpoint
-app.get("/", (req, res) => {
+// Basic usage info endpoint (API documentation)
+app.get("/api", (req, res) => {
   res.json({
     name: "Todo Ticket Printer Server",
     version: "1.0.0",
     endpoints: {
-      "GET /": "This help message",
+      "GET /": "Web UI for printing",
+      "GET /api": "API documentation",
       "GET /health": "Health check",
       "GET /printer-status": "Printer connection status",
-      "POST /print-todo": "Print a todo ticket",
+      "POST /api/print-todo": "Print a todo ticket",
+      "POST /api/print-shopping-list": "Print a shopping list",
     },
     usage: {
-      "POST /print-todo": {
+      "POST /api/print-todo": {
         body: {
           title: "string (required) - The main task title",
           assignee: "string (optional) - Person assigned to the task",
           description: "string (optional) - Additional task details",
         },
       },
+      "POST /api/print-shopping-list": {
+        body: {
+          title: "string (optional) - Shopping list title (default: 'Shopping List')",
+          items: "array (required) - List of items to buy. Can be strings or objects with 'name' and 'quantity' fields",
+        },
+      },
     },
-    example: {
-      title: "Fix the login bug",
-      assignee: "John Doe",
-      description:
-        "Users are unable to login with special characters in their passwords",
+    examples: {
+      todo: {
+        title: "Fix the login bug",
+        assignee: "John Doe",
+        description:
+          "Users are unable to login with special characters in their passwords",
+      },
+      shoppingList: {
+        title: "Grocery Shopping",
+        items: [
+          "Milk",
+          "Bread",
+          { name: "Eggs", quantity: "12" },
+          { name: "Apples", quantity: "6" },
+          "Butter",
+        ],
+      },
     },
   });
 });
